@@ -91,7 +91,7 @@ def fetch_sol_technicals(prices: dict) -> dict:
     # Get 90-day OHLC for moving averages
     ohlc = api_get(
         "https://api.coingecko.com/api/v3/coins/solana/ohlc",
-        params={"vs_currency": "usd", "days": "200"},
+        params={"vs_currency": "usd", "days": "365"},
     )
     if not ohlc or len(ohlc) < 50:
         return {"note": "Insufficient data for technicals"}

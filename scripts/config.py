@@ -22,9 +22,19 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # API Keys
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
+COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+
+# Default headers for all API requests
+DEFAULT_HEADERS = {
+    "User-Agent": "SolanaFloorDashboard/1.0 (+https://github.com/solanafloor-dashboard)",
+    "Accept": "application/json",
+}
+
+# Rate limiting delay between API calls (seconds)
+API_CALL_DELAY = 1.5
 
 # Watchlist — edit these to match your dashboard
 WATCHLIST = {
@@ -71,14 +81,26 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 def api_get(url: str, params: dict = None, headers: dict = None, retries: int = 3) -> dict | list | None:
-    """GET request with retry logic and rate limit respect."""
+    """GET request with retry logic, rate limit respect, and inter-call delay."""
     import requests
     log = get_logger("api")
+
+    # Merge default headers with any caller-provided headers
+    merged_headers = {**DEFAULT_HEADERS}
+    if headers:
+        merged_headers.update(headers)
+
+    # Add CoinGecko API key header when calling CoinGecko endpoints
+    if "coingecko.com" in url and COINGECKO_API_KEY:
+        merged_headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
+
     for attempt in range(retries):
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            # Rate limiting delay before each request
+            time.sleep(API_CALL_DELAY)
+            resp = requests.get(url, params=params, headers=merged_headers, timeout=30)
             if resp.status_code == 429:
-                wait = int(resp.headers.get("Retry-After", 10))
+                wait = int(resp.headers.get("Retry-After", 30))
                 log.warning(f"Rate limited, waiting {wait}s...")
                 time.sleep(wait)
                 continue
@@ -100,7 +122,7 @@ def rpc_post(method: str, params: list = None) -> dict | None:
         "params": params or [],
     }
     try:
-        resp = requests.post(SOLANA_RPC_URL, json=payload, timeout=30)
+        resp = requests.post(SOLANA_RPC_URL, json=payload, headers=DEFAULT_HEADERS, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         return data.get("result")

@@ -113,9 +113,16 @@ def fetch_protocol_rankings() -> list:
             continue
         # Get Solana-specific TVL if available
         chain_tvls = p.get("chainTvls", {})
-        sol_tvl = chain_tvls.get("Solana", p.get("tvl", 0))
-        if isinstance(sol_tvl, dict):
-            sol_tvl = sol_tvl.get("tvl", 0) if isinstance(sol_tvl, dict) else 0
+        sol_tvl_raw = chain_tvls.get("Solana", None)
+        if isinstance(sol_tvl_raw, (int, float)):
+            sol_tvl = sol_tvl_raw
+        elif isinstance(sol_tvl_raw, dict):
+            sol_tvl = sol_tvl_raw.get("tvl", 0)
+            # tvl field itself may be a list of time-series entries
+            if isinstance(sol_tvl, list) and sol_tvl:
+                sol_tvl = sol_tvl[-1].get("totalLiquidityUSD", 0) if isinstance(sol_tvl[-1], dict) else 0
+        else:
+            sol_tvl = p.get("tvl", 0)
 
         solana_protocols.append({
             "name": p.get("name", "Unknown"),
