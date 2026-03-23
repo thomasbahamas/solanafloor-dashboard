@@ -124,6 +124,7 @@ def run() -> dict:
     solana = load_json("solana.json")
     news = load_json("news.json")
     whales = load_json("whales.json")
+    upgrades = load_json("upgrades.json")
 
     compiled = {
         "generated_at": now_utc(),
@@ -132,6 +133,7 @@ def run() -> dict:
         "solana": solana,
         "news": news,
         "whales": whales,
+        "upgrades": upgrades,
     }
 
     # Compute WoW deltas

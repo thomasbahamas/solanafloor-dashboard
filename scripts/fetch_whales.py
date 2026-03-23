@@ -50,9 +50,19 @@ def fetch_staking_flows() -> dict:
     staking_protocols = []
     for p in data:
         if p.get("category") in ("Liquid Staking", "Staking Pool") and "Solana" in p.get("chains", []):
+            # Use Solana-specific TVL from chainTvls to avoid counting
+            # non-SOL staking (e.g., Lido's $19B is mostly ETH staking)
+            chain_tvls = p.get("chainTvls", {})
+            sol_tvl = chain_tvls.get("Solana", 0)
+            if sol_tvl == 0:
+                # Fallback: if no chainTvls but only chain is Solana, use total
+                if p.get("chains", []) == ["Solana"]:
+                    sol_tvl = p.get("tvl", 0)
+                else:
+                    continue  # Skip multi-chain protocols without Solana TVL breakdown
             staking_protocols.append({
                 "name": p.get("name", "Unknown"),
-                "tvl": p.get("tvl", 0),
+                "tvl": sol_tvl,
                 "change_1d": round(p.get("change_1d", 0) or 0, 1),
                 "change_7d": round(p.get("change_7d", 0) or 0, 1),
             })

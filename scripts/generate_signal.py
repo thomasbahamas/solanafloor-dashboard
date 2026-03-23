@@ -203,6 +203,31 @@ def build_data_prompt(compiled: dict) -> str:
     for t in market.get("trending", []):
         sections.append(f"  #{t.get('market_cap_rank', '?')} {t['symbol']} ({t['name']})")
 
+    # Network upgrades
+    upgrades = compiled.get("upgrades", {})
+    if upgrades:
+        sections.append("")
+        sections.append("=== SOLANA NETWORK UPGRADES ===")
+        infra = upgrades.get("infrastructure", {})
+        for key, item in infra.items():
+            metric = f" — {item['metric_label']}: {item['metric_value']}" if item.get("metric_value") else ""
+            sections.append(f"  {item['name']}: {item['status']}{metric}")
+            sections.append(f"    {item['description']}")
+
+        simds = upgrades.get("simds", {})
+        stats = simds.get("stats", {})
+        if stats:
+            sections.append(f"  SIMDs: {stats.get('open', 0)} open, {stats.get('merged', 0)} merged")
+            for s in simds.get("recent", [])[:8]:
+                state_tag = s['state'].upper()
+                sections.append(f"    [{state_tag}] {s['title']} (by {s['author']}, {s['updated']})")
+
+        upgrade_news = upgrades.get("upgrade_news", [])
+        if upgrade_news:
+            sections.append("  Upgrade-related news:")
+            for n in upgrade_news[:5]:
+                sections.append(f"    {n['title']} — {n['source']}")
+
     return "\n".join(sections)
 
 

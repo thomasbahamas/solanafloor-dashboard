@@ -57,6 +57,9 @@ def main():
     time.sleep(1)
 
     run_step("Fetch Whale Intelligence", "fetch_whales")
+    time.sleep(1)
+
+    run_step("Fetch Network Upgrades", "fetch_upgrades")
 
     # Step 2: Compile
     run_step("Compile Data", "compile_data")

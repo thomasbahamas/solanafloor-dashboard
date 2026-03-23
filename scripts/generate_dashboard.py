@@ -1,10 +1,13 @@
-"""Generate the Solana Weekly dashboard as a static HTML page.
+"""Generate the Solana Weekly site — homepage + dashboard.
 
-Tabbed interface with sections:
-  Overview  — Market, Technical, News
-  Deep Dive — Ecosystem, Solana, DEX Volume, Protocols
-  Intelligence — Whales, Market Makers, X Pulse, The Signal
-  Content — Pitches, Tweets, Briefing
+Homepage (output/index.html):
+  Summary/highlights with newsletter signup, links to full dashboard.
+
+Dashboard (output/dashboard/index.html):
+  Tabbed interface with sections:
+    Overview  — Market, Technical, News
+    Deep Dive — Ecosystem, Solana, DEX Volume, Protocols
+    Intelligence — The Signal, Whales, Market Makers, X Pulse
 """
 
 import json
@@ -500,6 +503,158 @@ def build_xpulse_panel(narrative):
 </div>'''
 
 
+def build_upgrades_panel(upgrades):
+    if not upgrades:
+        return '<div class="panel-section"><p class="muted">No upgrade data available.</p></div>'
+
+    # --- Client adoption bar chart ---
+    adoption = upgrades.get("validator_adoption", {})
+    clients = adoption.get("clients", [])
+    total_validators = adoption.get("total_validators", 0)
+    total_stake_sol = adoption.get("total_stake_sol", 0)
+
+    adoption_html = ""
+    if clients:
+        # Color map for clients
+        colors = {
+            "Agave": "#9333ea",
+            "Jito-Solana": "#22c55e",
+            "Firedancer": "#f97316",
+            "Frankendancer": "#eab308",
+        }
+        bars_html = ""
+        for c in clients:
+            pct = c["stake_pct"]
+            color = colors.get(c["name"], "#71717a")
+            count = c["validator_count"]
+            stake_m = c.get("stake_sol", 0)
+            stake_str = f"{stake_m/1e6:.0f}M SOL" if stake_m >= 1e6 else f"{stake_m:,.0f} SOL"
+            bar_w = max(2, pct)  # min width so small bars are visible
+            bars_html += f'''<div style="margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+    <span style="font-weight:600;font-size:0.88rem">{esc(c["name"])}</span>
+    <span style="font-size:0.82rem"><strong>{pct}%</strong> <span class="muted">&middot; {count} validators &middot; {stake_str}</span></span>
+  </div>
+  <div style="background:var(--surface2);border-radius:4px;height:8px;overflow:hidden">
+    <div style="background:{color};height:100%;width:{bar_w}%;border-radius:4px;transition:width 0.3s"></div>
+  </div>
+</div>'''
+
+        # Stacked bar summary
+        stacked = ""
+        for c in clients:
+            pct = c["stake_pct"]
+            if pct < 0.5:
+                continue
+            color = colors.get(c["name"], "#71717a")
+            stacked += f'<div style="width:{pct}%;background:{color};height:100%" title="{esc(c["name"])}: {pct}%"></div>'
+
+        adoption_html = f'''<div style="margin-bottom:24px">
+  <h4>Validator Client Adoption (Stake-Weighted)</h4>
+  <div class="stats-row" style="margin-bottom:16px">
+    <div class="stat"><div class="stat-label">Total Validators</div><div class="stat-value">{total_validators:,}</div></div>
+    <div class="stat"><div class="stat-label">Total Stake</div><div class="stat-value">{total_stake_sol/1e6:.0f}M SOL</div></div>
+  </div>
+  <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:16px;background:var(--surface2)">{stacked}</div>
+  {bars_html}
+</div>'''
+
+    # Top versions
+    top_versions = adoption.get("top_versions", [])
+    versions_html = ""
+    if top_versions:
+        rows = ""
+        for v in top_versions[:8]:
+            rows += f'<tr><td><code style="font-size:0.78rem">{esc(v["version"])}</code></td><td>{esc(v["client"])}</td><td>{v["stake_pct"]}%</td></tr>'
+        versions_html = f'''<h4 style="margin-top:20px">Top Versions by Stake</h4>
+<table><tr><th>Version</th><th>Client</th><th>Stake %</th></tr>{rows}</table>'''
+
+    # --- Infrastructure cards ---
+    infra = upgrades.get("infrastructure", {})
+    # Only show non-client infra cards (DoubleZero, Alpenglow, Harmonic)
+    infra_cards = ""
+    for key in ["doublezero", "alpenglow", "harmonic"]:
+        item = infra.get(key)
+        if not item:
+            continue
+        metric_html = ""
+        if item.get("metric_value"):
+            metric_html = f'<div class="stat-value" style="font-size:1.1rem">{esc(str(item["metric_value"]))}</div>'
+            if item.get("metric_detail"):
+                metric_html += f'<div class="muted">{esc(item["metric_detail"])}</div>'
+
+        status = item.get("status", "Unknown")
+        status_color = "var(--green)" if "live" in status.lower() or "active" in status.lower() else "#eab308" if "development" in status.lower() else "var(--muted)"
+
+        url_attr = f' href="{esc(item["url"])}" target="_blank" rel="noopener"' if item.get("url") else ""
+        name_tag = f"<a{url_attr} style='color:var(--text);text-decoration:none'>{esc(item['name'])}</a>" if url_attr else esc(item["name"])
+
+        infra_cards += f'''<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:start">
+    <div>
+      <div style="font-weight:600;font-size:0.9rem">{name_tag}</div>
+      <div class="muted" style="font-size:0.78rem;margin-top:2px">{esc(item["description"])}</div>
+    </div>
+    <span style="color:{status_color};font-size:0.7rem;font-weight:600;text-transform:uppercase;white-space:nowrap;margin-left:12px">{esc(status)}</span>
+  </div>
+  {f'<div style="margin-top:8px">{metric_html}</div>' if metric_html else ''}
+</div>'''
+
+    # --- SIMDs ---
+    simds = upgrades.get("simds", {})
+    stats = simds.get("stats", {})
+    recent = simds.get("recent", [])
+
+    simd_stats = ""
+    if stats:
+        simd_stats = f'''<div class="stats-row" style="margin-bottom:12px">
+  <div class="stat"><div class="stat-label">Open</div><div class="stat-value">{stats.get("open", 0)}</div></div>
+  <div class="stat"><div class="stat-label">Merged</div><div class="stat-value" style="color:var(--green)">{stats.get("merged", 0)}</div></div>
+  <div class="stat"><div class="stat-label">Closed</div><div class="stat-value">{stats.get("closed", 0)}</div></div>
+</div>'''
+
+    simd_rows = ""
+    for s in recent[:10]:
+        state = s.get("state", "")
+        if state == "merged":
+            state_badge = '<span style="color:var(--green);font-size:0.7rem;font-weight:600">MERGED</span>'
+        elif state == "open":
+            state_badge = '<span style="color:#eab308;font-size:0.7rem;font-weight:600">OPEN</span>'
+        else:
+            state_badge = '<span style="color:var(--muted);font-size:0.7rem;font-weight:600">CLOSED</span>'
+
+        labels_html = ""
+        for lb in s.get("labels", [])[:3]:
+            labels_html += f'<span style="background:var(--surface2);color:var(--accent);padding:1px 6px;border-radius:3px;font-size:0.6rem;margin-left:4px">{esc(lb)}</span>'
+
+        simd_rows += f'''<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.84rem">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <a href="{esc(s.get("url","#"))}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none">{esc(s["title"][:80])}</a>
+    {state_badge}
+  </div>
+  <div class="muted" style="font-size:0.7rem">{esc(s.get("author",""))} &middot; {esc(s.get("updated",""))}{labels_html}</div>
+</div>'''
+
+    # --- Upgrade news ---
+    upgrade_news = upgrades.get("upgrade_news", [])
+    news_html = ""
+    for n in upgrade_news[:6]:
+        news_html += f'''<div class="news-item">
+  <a href="{esc(n.get("url","#"))}" target="_blank" rel="noopener">{esc(n["title"])}</a>
+  <span class="news-source">{esc(n.get("source",""))}</span>
+</div>'''
+
+    return f'''<div class="panel-section">
+  {adoption_html}
+  {versions_html}
+  {f'<h4 style="margin-top:24px">Infrastructure &amp; Upcoming Upgrades</h4><div class="grid grid-3" style="margin-bottom:20px">{infra_cards}</div>' if infra_cards else ''}
+  <h4 style="margin-top:24px">SIMDs — Solana Improvement Documents</h4>
+  {simd_stats}
+  {simd_rows if simd_rows else '<p class="muted">No SIMD data available.</p>'}
+  {f'<h4 style="margin-top:20px">Upgrade News</h4>{news_html}' if news_html else ''}
+</div>'''
+
+
 def build_signal_panel(signal):
     context = signal.get("market_context", "No analysis generated.")
     divergences = signal.get("divergence_alerts", [])
@@ -575,11 +730,12 @@ def build_briefing_panel(briefing):
 CSS = """
 :root {
   --bg: #09090b; --surface: #111113; --surface2: #18181b;
-  --border: #1e1e2e; --text: #e4e4e7; --muted: #71717a;
+  --border: #1e1e2e; --border-heavy: #27272a; --text: #e4e4e7; --muted: #71717a;
   --accent: #9333ea; --accent2: #7c3aed;
   --green: #22c55e; --red: #ef4444;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 56px; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   background: var(--bg); color: var(--text);
@@ -591,43 +747,67 @@ h4 { font-size: 0.9rem; margin-bottom: 8px; color: var(--muted); text-transform:
 /* Header */
 .header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 0;
+  padding: 16px 0; border-bottom: 1px solid var(--border);
 }
 .header-left h1 { font-size: 1.6rem; letter-spacing: 2px; }
+.header-left h1 a { color: inherit; text-decoration: none; }
 .header-left .meta { color: var(--muted); font-size: 0.8rem; }
 .header-right { display: flex; align-items: center; gap: 12px; }
 .fg-mini { text-align: center; }
 .fg-mini .fg-label-text { font-size: 0.75rem; color: var(--muted); }
 
-/* Tabs */
-.tab-bar {
-  display: flex; gap: 0; border-bottom: 1px solid var(--border);
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
+/* Sticky section nav */
+.section-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  display: flex; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  backdrop-filter: blur(8px);
 }
-.tab-group {
-  padding: 12px 20px; font-size: 0.85rem; font-weight: 600;
-  color: var(--muted); background: none; border: none; cursor: pointer;
-  border-bottom: 2px solid transparent; white-space: nowrap;
+.section-nav a {
+  padding: 12px 18px; font-size: 0.78rem; font-weight: 600;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent;
   transition: color 0.15s, border-color 0.15s;
 }
-.tab-group:hover { color: var(--text); }
-.tab-group.active { color: var(--accent); border-bottom-color: var(--accent); }
-.sub-bar {
-  display: flex; gap: 0; border-bottom: 1px solid var(--border);
-  overflow-x: auto; background: var(--surface);
-}
-.sub-tab {
-  padding: 10px 16px; font-size: 0.8rem; color: var(--muted);
-  background: none; border: none; cursor: pointer;
-  border-bottom: 2px solid transparent; white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-}
-.sub-tab:hover { color: var(--text); }
-.sub-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.section-nav a:hover { color: var(--text); }
+.section-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-/* Panels */
-.panel { display: none; padding: 16px 0; }
-.panel.active { display: block; }
+/* Newsletter banner */
+.nl-banner {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 20px; margin: 12px 0; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.nl-banner .nl-text { font-size: 0.82rem; color: var(--muted); }
+.nl-banner .nl-text strong { color: var(--text); }
+.nl-banner a {
+  background: var(--accent); color: #fff; padding: 6px 18px; border-radius: 5px;
+  font-size: 0.8rem; font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.nl-banner a:hover { opacity: 0.9; }
+
+/* Sections */
+.dash-section {
+  padding: 24px 0; border-bottom: 1px solid var(--border);
+}
+.dash-section:last-of-type { border-bottom: none; }
+.section-title {
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--accent); margin-bottom: 16px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+
+/* Two-column section layout */
+.section-cols {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+}
+.section-cols-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
+}
+.section-full { }
+
+/* Panel section (reused from panel builders) */
 .panel-section { padding: 0; }
 .section-badge {
   display: inline-block; background: var(--surface2); color: var(--muted);
@@ -636,7 +816,7 @@ h4 { font-size: 0.9rem; margin-bottom: 8px; color: var(--muted); text-transform:
 
 /* Stats */
 .stats-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
-.stat { flex: 1; min-width: 140px; }
+.stat { flex: 1; min-width: 120px; }
 .stat-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-value { font-size: 1.25rem; font-weight: 700; }
 .muted { color: var(--muted); font-size: 0.8rem; }
@@ -725,55 +905,18 @@ td { padding: 7px 6px; border-bottom: 1px solid var(--border); }
 .div-alert { padding: 10px 0 10px 14px; margin-bottom: 8px; }
 .div-sev { font-size: 0.75rem; font-weight: 600; margin-left: 6px; }
 
-/* Pitches */
-.pitch-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 14px; position: relative;
-}
-.pitch-new {
-  display: inline-block; background: var(--green); color: #000;
-  padding: 1px 8px; border-radius: 3px; font-size: 0.65rem; font-weight: 700; margin-bottom: 6px;
-}
-
-/* Tweets */
-.tweet-handle { color: var(--accent); font-weight: 600; margin-bottom: 12px; }
-.tweet-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 14px; margin-bottom: 10px;
-}
-.tweet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.tweet-label { color: var(--accent); font-size: 0.8rem; font-weight: 600; }
-.tweet-text {
-  white-space: pre-wrap; font-family: inherit; font-size: 0.88rem;
-  color: var(--text); background: none; border: none; margin: 0;
-}
-.copy-btn {
-  background: var(--surface2); color: var(--muted); border: 1px solid var(--border);
-  padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
-  transition: color 0.15s, border-color 0.15s;
-}
-.copy-btn:hover { color: var(--text); border-color: var(--accent); }
-
-/* Briefing */
-.brief-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.briefing-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 20px; font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 0.82rem; line-height: 1.8; white-space: pre-wrap;
-  max-height: 700px; overflow-y: auto;
-}
-
 /* Footer */
 footer { text-align: center; color: var(--muted); padding: 24px 0; font-size: 0.75rem; border-top: 1px solid var(--border); margin-top: 20px; }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .section-cols, .section-cols-3 { grid-template-columns: 1fr; }
   .grid-prices { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .stats-row { flex-direction: column; gap: 12px; }
   .header { flex-direction: column; gap: 8px; align-items: flex-start; }
-  .tab-group { padding: 10px 14px; font-size: 0.8rem; }
-  .sub-tab { padding: 8px 12px; font-size: 0.75rem; }
+  .section-nav a { padding: 10px 14px; font-size: 0.75rem; }
   .tech-row { flex-direction: column; }
 }
 """
@@ -783,75 +926,433 @@ footer { text-align: center; color: var(--muted); padding: 24px 0; font-size: 0.
 # ---------------------------------------------------------------------------
 
 JS = """
-var TABS = {
-  overview: ['market','technical','news'],
-  deepdive: ['ecosystem','solana','dex','protocols'],
-  intelligence: ['whales','marketmakers','xpulse','signal'],
-  content: ['pitches','tweets','briefing']
-};
-var currentGroup = 'overview';
-
-function showGroup(group) {
-  currentGroup = group;
-  var i, els;
-  // Update main tabs
-  els = document.querySelectorAll('.tab-group');
-  for (i = 0; i < els.length; i++) els[i].className = 'tab-group';
-  var activeTab = document.querySelector('.tab-group[data-group=\"' + group + '\"]');
-  if (activeTab) activeTab.className = 'tab-group active';
-  // Show correct sub-bar
-  els = document.querySelectorAll('.sub-bar');
-  for (i = 0; i < els.length; i++) els[i].style.display = 'none';
-  var bar = document.getElementById('sub-' + group);
-  if (bar) bar.style.display = 'flex';
-  // Show first panel in group
-  showPanel(TABS[group][0]);
-}
-
-function showPanel(panel) {
-  var i, els;
-  // Hide all panels
-  els = document.querySelectorAll('.panel');
-  for (i = 0; i < els.length; i++) {
-    els[i].style.display = 'none';
-    els[i].className = 'panel';
+// Scroll-spy: highlight active section in nav
+(function() {
+  var links = document.querySelectorAll('.section-nav a');
+  var sections = [];
+  for (var i = 0; i < links.length; i++) {
+    var id = links[i].getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({el: el, link: links[i]});
   }
-  // Show target
-  var el = document.getElementById('panel-' + panel);
-  if (el) {
-    el.style.display = 'block';
-    el.className = 'panel active';
+  function onScroll() {
+    var scrollY = window.scrollY + 80;
+    var active = sections[0];
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].el.offsetTop <= scrollY) active = sections[i];
+    }
+    for (var i = 0; i < sections.length; i++) {
+      sections[i].link.classList.toggle('active', sections[i] === active);
+    }
   }
-  // Update sub-tabs in current group
-  var subBar = document.getElementById('sub-' + currentGroup);
-  if (subBar) {
-    var tabs = subBar.querySelectorAll('.sub-tab');
-    for (i = 0; i < tabs.length; i++) tabs[i].className = 'sub-tab';
-  }
-  var tab = document.querySelector('.sub-tab[data-panel=\"' + panel + '\"]');
-  if (tab) tab.className = 'sub-tab active';
-}
-
-function copyTweet(btn) {
-  var text = btn.parentElement.nextElementSibling.textContent;
-  navigator.clipboard.writeText(text).then(function() {
-    btn.textContent = 'Copied!';
-    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
-  });
-}
-
-function copyBriefing() {
-  var text = document.getElementById('briefing-text').textContent;
-  navigator.clipboard.writeText(text).then(function() {
-    var btn = document.querySelector('.brief-header .copy-btn');
-    btn.textContent = 'Copied!';
-    setTimeout(function() { btn.textContent = 'Copy full script'; }, 1500);
-  });
-}
-
-// Init — run immediately, no DOMContentLoaded needed since script is at end of body
-showGroup('overview');
+  window.addEventListener('scroll', onScroll, {passive: true});
+  onScroll();
+})();
 """
+
+
+# ---------------------------------------------------------------------------
+# Homepage builder
+# ---------------------------------------------------------------------------
+
+HOMEPAGE_CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
+
+:root {
+  --bg: #09090b; --surface: #111113; --surface2: #18181b;
+  --border: #27272a; --border-heavy: #3f3f46;
+  --text: #e4e4e7; --muted: #71717a; --dim: #52525b;
+  --accent: #9333ea; --accent2: #7c3aed;
+  --green: #22c55e; --red: #ef4444;
+  --serif: 'Playfair Display', 'Georgia', 'Times New Roman', serif;
+  --body: 'Source Serif 4', 'Georgia', serif;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: var(--body); background: var(--bg); color: var(--text);
+  line-height: 1.7; max-width: 900px; margin: 0 auto; padding: 0 20px;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* === MASTHEAD === */
+.masthead {
+  text-align: center; padding: 36px 0 0;
+}
+.masthead-rule { border: none; border-top: 3px double var(--border-heavy); margin-bottom: 16px; }
+.masthead h1 {
+  font-family: var(--serif); font-size: 3.2rem; font-weight: 900;
+  letter-spacing: 4px; line-height: 1.1;
+}
+.masthead .edition {
+  font-family: var(--sans); font-size: 0.75rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 2px; margin-top: 6px;
+}
+.masthead-rule-bottom { border: none; border-top: 1px solid var(--border); margin-top: 16px; }
+
+/* === NAV === */
+.hp-nav {
+  display: flex; justify-content: center; gap: 8px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+  font-family: var(--sans); font-size: 0.78rem; text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.hp-nav a {
+  color: var(--dim); padding: 4px 14px;
+  transition: color 0.15s;
+}
+.hp-nav a:hover { color: var(--text); text-decoration: none; }
+.hp-nav-sep { color: var(--border); }
+
+/* === TICKER STRIP === */
+.ticker-strip {
+  display: flex; justify-content: center; gap: 0;
+  border-bottom: 2px solid var(--border-heavy);
+  font-family: var(--sans); overflow-x: auto;
+}
+.ticker {
+  padding: 12px 20px; text-align: center;
+  border-right: 1px solid var(--border); flex-shrink: 0;
+}
+.ticker:last-child { border-right: none; }
+.ticker .t-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+.ticker .t-value { font-size: 1.15rem; font-weight: 700; margin: 2px 0; }
+.ticker .t-change { font-size: 0.75rem; }
+
+/* === HEADLINE / LEAD === */
+.lead {
+  padding: 28px 0; border-bottom: 1px solid var(--border);
+}
+.lead .kicker {
+  font-family: var(--sans); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--accent); margin-bottom: 8px;
+}
+.lead h2 {
+  font-family: var(--serif); font-size: 1.8rem; font-weight: 700;
+  line-height: 1.3; margin-bottom: 12px;
+}
+.lead .deck {
+  font-size: 1.05rem; color: var(--muted); line-height: 1.7;
+  font-style: italic;
+}
+
+/* === TWO COLUMN BODY === */
+.columns {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  padding: 24px 0; border-bottom: 1px solid var(--border);
+}
+.col { }
+
+/* === SECTIONS === */
+.section-head {
+  font-family: var(--sans); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--accent); padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent); margin-bottom: 14px;
+  display: inline-block;
+}
+
+/* Signal/context */
+.signal-text {
+  font-size: 0.95rem; line-height: 1.85; white-space: pre-wrap;
+}
+
+/* Alerts */
+.hp-alert {
+  padding: 10px 0 10px 16px; margin-bottom: 8px;
+  border-left: 3px solid var(--dim);
+}
+.hp-alert-high { border-left-color: var(--red); }
+.hp-alert-medium { border-left-color: #f97316; }
+.hp-alert-low { border-left-color: #eab308; }
+.hp-alert strong { font-family: var(--sans); font-size: 0.85rem; }
+.hp-alert .desc { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.hp-alert .sev {
+  font-family: var(--sans); font-size: 0.65rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-left: 8px;
+}
+
+/* News */
+.hp-news-item {
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.hp-news-item a { color: var(--text); font-size: 0.9rem; }
+.hp-news-item a:hover { color: var(--accent); }
+.hp-news-source {
+  display: block; font-family: var(--sans); color: var(--dim);
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;
+}
+
+/* Angles */
+.hp-angle { padding: 5px 0; font-size: 0.9rem; }
+.hp-angle-arrow { color: var(--accent); margin-right: 6px; }
+
+/* === CTA === */
+.hp-cta { text-align: center; padding: 32px 0; }
+.hp-cta-btn {
+  display: inline-block; background: var(--accent); color: #fff;
+  padding: 14px 44px; border-radius: 6px; font-family: var(--sans);
+  font-size: 0.9rem; font-weight: 600; text-decoration: none;
+  letter-spacing: 0.5px; transition: opacity 0.15s;
+}
+.hp-cta-btn:hover { opacity: 0.9; text-decoration: none; }
+
+/* === NEWSLETTER === */
+.hp-newsletter {
+  border: 2px solid var(--border-heavy); padding: 36px 32px;
+  text-align: center; margin: 0 0 24px;
+}
+.hp-newsletter h2 { font-family: var(--serif); font-size: 1.3rem; margin-bottom: 6px; }
+.hp-newsletter .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
+.hp-email-form { display: flex; gap: 8px; max-width: 420px; margin: 0 auto; }
+.hp-email-input {
+  flex: 1; padding: 12px 16px; border: 1px solid var(--border-heavy);
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 0.88rem; outline: none;
+}
+.hp-email-input:focus { border-color: var(--accent); }
+.hp-email-btn {
+  padding: 12px 28px; border: none;
+  background: var(--text); color: var(--bg); font-family: var(--sans);
+  font-weight: 600; cursor: pointer; font-size: 0.85rem;
+  letter-spacing: 0.5px; transition: opacity 0.15s;
+}
+.hp-email-btn:hover { opacity: 0.85; }
+
+/* === FOOTER === */
+footer {
+  text-align: center; color: var(--dim); padding: 20px 0;
+  font-family: var(--sans); font-size: 0.7rem; letter-spacing: 0.5px;
+  border-top: 3px double var(--border-heavy); margin-top: 8px;
+}
+footer a { color: var(--muted); }
+
+/* === RESPONSIVE === */
+@media (max-width: 640px) {
+  .masthead h1 { font-size: 2.2rem; letter-spacing: 2px; }
+  .columns { grid-template-columns: 1fr; gap: 0; }
+  .col { padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .col:last-child { border-bottom: none; margin-bottom: 0; }
+  .ticker { padding: 10px 14px; }
+  .ticker .t-value { font-size: 1rem; }
+  .lead h2 { font-size: 1.4rem; }
+  .hp-email-form { flex-direction: column; }
+  .hp-newsletter { padding: 28px 20px; }
+}
+"""
+
+
+def build_homepage(compiled: dict, narrative: dict) -> str:
+    """Build the summary/highlights homepage at solanaweekly.io/."""
+    market = compiled.get("market", {})
+    solana = compiled.get("solana", {})
+    news = compiled.get("news", {})
+    wow = compiled.get("wow", {})
+    generated_at = compiled.get("generated_at", now_utc())
+
+    prices = market.get("prices", {})
+    global_data = market.get("global", {})
+    fg = market.get("fear_greed", {})
+    dex = solana.get("dex_volumes", {})
+    sol_tvl = solana.get("solana_tvl", {})
+
+    signal = (narrative or {}).get("the_signal", {})
+    context = signal.get("market_context", "")
+    divergences = signal.get("divergence_alerts", [])
+    angles = signal.get("story_angles", [])
+
+    # Key numbers
+    sol = prices.get("SOL", {})
+    btc = prices.get("BTC", {})
+    fg_val = fg.get("value", "N/A")
+    fg_label = fg.get("label", "")
+
+    # Ticker data
+    sol_price = sol.get("price", 0)
+    sol_chg = sol.get("change_24h")
+    btc_price = btc.get("price", 0)
+    btc_chg = btc.get("change_24h")
+    dex_combined = dex.get("combined_24h", 0)
+    tvl_current = sol_tvl.get("current", 0)
+    tvl_chg = sol_tvl.get("change_1d")
+
+    fg_color = "#ef4444" if isinstance(fg_val, (int, float)) and fg_val <= 25 else "#f97316" if isinstance(fg_val, (int, float)) and fg_val <= 45 else "#eab308" if isinstance(fg_val, (int, float)) and fg_val <= 55 else "#22c55e"
+
+    # Build headline from signal or default
+    headline = "Solana Ecosystem Daily Briefing"
+    deck = ""
+    if context:
+        # Use first sentence of context as deck
+        sentences = context.replace("\n", " ").split(". ")
+        if len(sentences) >= 2:
+            headline = sentences[0].strip().rstrip(".")
+            deck = ". ".join(sentences[1:3]).strip()
+            if deck and not deck.endswith("."):
+                deck += "."
+        else:
+            deck = context[:200]
+
+    # Divergence alerts
+    div_html = ""
+    if divergences:
+        for d in divergences[:4]:
+            sev = d.get("severity", "low")
+            sev_color = "var(--red)" if sev == "high" else "#f97316" if sev == "medium" else "#eab308"
+            div_html += f'''<div class="hp-alert hp-alert-{sev}">
+  <strong>{esc(d.get("title",""))}</strong><span class="sev" style="color:{sev_color}">{sev}</span>
+  <div class="desc">{esc(d.get("description",""))}</div>
+</div>'''
+
+    # Story angles
+    angles_html = ""
+    if angles:
+        for a in angles[:4]:
+            angles_html += f'<div class="hp-angle"><span class="hp-angle-arrow">&#9656;</span> {esc(a)}</div>'
+
+    # Signal body text
+    signal_body = ""
+    if context:
+        signal_body = f'<div class="signal-text">{esc(context)}</div>'
+    else:
+        signal_body = '<p style="color:var(--muted);font-style:italic">Signal analysis generates daily at 6am PT. Check back soon.</p>'
+
+    # Top news
+    all_news = news.get("solana_news", []) + news.get("general_news", [])
+    news_html = ""
+    for s in all_news[:6]:
+        news_html += f'''<div class="hp-news-item">
+  <a href="{esc(s.get("url","#"))}" target="_blank" rel="noopener">{esc(s["title"])}</a>
+  <span class="hp-news-source">{esc(s.get("source",""))}</span>
+</div>'''
+
+    # Format date nicely
+    from datetime import datetime
+    try:
+        dt = datetime.strptime(generated_at[:19], "%Y-%m-%d %H:%M")
+        date_display = dt.strftime("%A, %B %-d, %Y")
+    except Exception:
+        date_display = generated_at[:10]
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana Weekly — Daily Solana Intelligence</title>
+<meta name="description" content="Daily Solana ecosystem intelligence. Key metrics, market analysis, divergence alerts, and top stories delivered to your inbox every morning.">
+<style>{HOMEPAGE_CSS}</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<div class="masthead">
+  <hr class="masthead-rule">
+  <h1>SOLANA WEEKLY</h1>
+  <div class="edition">{esc(date_display)} &nbsp;&bull;&nbsp; Daily Intelligence</div>
+  <hr class="masthead-rule-bottom">
+</div>
+
+<!-- NAV -->
+<nav class="hp-nav">
+  <a href="/dashboard">Dashboard</a>
+  <span class="hp-nav-sep">|</span>
+  <a href="https://solanaweekly.fun" target="_blank">Podcast</a>
+  <span class="hp-nav-sep">|</span>
+  <a href="#newsletter">Subscribe</a>
+</nav>
+
+<!-- TICKER STRIP -->
+<div class="ticker-strip">
+  <div class="ticker">
+    <div class="t-label">SOL</div>
+    <div class="t-value">${sol_price:,.2f}</div>
+    <div class="t-change">{fmt_change(sol_chg)}</div>
+  </div>
+  <div class="ticker">
+    <div class="t-label">BTC</div>
+    <div class="t-value">${btc_price:,.0f}</div>
+    <div class="t-change">{fmt_change(btc_chg)}</div>
+  </div>
+  <div class="ticker">
+    <div class="t-label">Fear &amp; Greed</div>
+    <div class="t-value" style="color:{fg_color}">{fg_val}</div>
+    <div class="t-change" style="color:var(--muted)">{esc(str(fg_label))}</div>
+  </div>
+  <div class="ticker">
+    <div class="t-label">DEX Vol 24h</div>
+    <div class="t-value">{fmt_usd(dex_combined)}</div>
+    <div class="t-change">{fmt_wow(wow, "dex_volume")}</div>
+  </div>
+  <div class="ticker">
+    <div class="t-label">Solana TVL</div>
+    <div class="t-value">{fmt_usd(tvl_current)}</div>
+    <div class="t-change">{fmt_change(tvl_chg)}</div>
+  </div>
+</div>
+
+<!-- LEAD STORY -->
+<div class="lead">
+  <div class="kicker">Today&rsquo;s Signal</div>
+  <h2>{esc(headline)}</h2>
+  {f'<div class="deck">{esc(deck)}</div>' if deck else ''}
+</div>
+
+<!-- TWO COLUMN BODY -->
+<div class="columns">
+  <div class="col">
+    <div class="section-head">Analysis</div>
+    {signal_body}
+    {f'<div style="margin-top:20px"><div class="section-head">What to Watch</div>{angles_html}</div>' if angles_html else ''}
+  </div>
+  <div class="col">
+    {f'<div class="section-head">Divergence Alerts</div>{div_html}' if div_html else ''}
+    <div style="margin-top:{20 if div_html else 0}px">
+      <div class="section-head">Headlines</div>
+      {news_html if news_html else '<p style="color:var(--muted)">No stories available.</p>'}
+    </div>
+  </div>
+</div>
+
+<!-- CTA -->
+<div class="hp-cta">
+  <a href="/dashboard" class="hp-cta-btn">Open Full Dashboard &rarr;</a>
+</div>
+
+<!-- NEWSLETTER -->
+<div class="hp-newsletter" id="newsletter">
+  <h2>Get This In Your Inbox</h2>
+  <div class="sub">Daily highlights + what matters in Solana. Every morning, before the market moves.</div>
+  <form class="hp-email-form" id="newsletter-form" onsubmit="return handleSubscribe(event)">
+    <input type="email" class="hp-email-input" placeholder="your@email.com" required id="newsletter-email">
+    <button type="submit" class="hp-email-btn">Subscribe</button>
+  </form>
+  <div id="newsletter-msg" style="margin-top:12px;font-size:0.85rem;display:none"></div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  solanaweekly.io &nbsp;&bull;&nbsp; Daily Solana Intelligence &nbsp;&bull;&nbsp; {esc(generated_at)}
+</footer>
+
+<script>
+function handleSubscribe(e) {{
+  e.preventDefault();
+  var email = document.getElementById('newsletter-email').value;
+  var msg = document.getElementById('newsletter-msg');
+  // TODO: Connect to Kit (ConvertKit) API
+  var subs = JSON.parse(localStorage.getItem('sw_subscribers') || '[]');
+  if (subs.indexOf(email) === -1) subs.push(email);
+  localStorage.setItem('sw_subscribers', JSON.stringify(subs));
+  msg.style.display = 'block';
+  msg.style.color = '#22c55e';
+  msg.textContent = 'You\\'re in! Newsletter coming soon.';
+  document.getElementById('newsletter-email').value = '';
+  return false;
+}}
+</script>
+
+</body>
+</html>'''
 
 
 # ---------------------------------------------------------------------------
@@ -876,10 +1377,8 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
     dex = solana.get("dex_volumes", {})
     protocols = solana.get("protocol_rankings", [])
 
+    upgrades = compiled.get("upgrades", {})
     signal = narrative.get("the_signal", {})
-    pitches = narrative.get("story_pitches", [])
-    tweets = narrative.get("tweet_options", [])
-    briefing = narrative.get("briefing_script", "")
 
     fg_val = fg.get("value", "N/A")
     fg_label = fg.get("label", "")
@@ -901,7 +1400,7 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
 <!-- HEADER -->
 <div class="header">
   <div class="header-left">
-    <h1>SOLANA WEEKLY</h1>
+    <h1><a href="/">SOLANA WEEKLY</a></h1>
     <div class="meta">Updated: {esc(generated_at)}{f" &middot; Run #{run_num}" if run_num else ""}</div>
   </div>
   <div class="header-right">
@@ -912,58 +1411,102 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
   </div>
 </div>
 
-<!-- MAIN TABS -->
-<div class="tab-bar">
-  <button class="tab-group active" data-group="overview" onclick="showGroup('overview')">Overview</button>
-  <button class="tab-group" data-group="deepdive" onclick="showGroup('deepdive')">Deep Dive</button>
-  <button class="tab-group" data-group="intelligence" onclick="showGroup('intelligence')">Intelligence</button>
-  <button class="tab-group" data-group="content" onclick="showGroup('content')">Content</button>
+<!-- STICKY NAV -->
+<nav class="section-nav">
+  <a href="#market" class="active">Market</a>
+  <a href="#technical">Technical</a>
+  <a href="#solana">Solana</a>
+  <a href="#dex">DEX</a>
+  <a href="#protocols">Protocols</a>
+  <a href="#upgrades">Upgrades</a>
+  <a href="#signal">Signal</a>
+  <a href="#intelligence">Intel</a>
+  <a href="#ecosystem">Ecosystem</a>
+  <a href="#news">News</a>
+</nav>
+
+<!-- NEWSLETTER BANNER -->
+<div class="nl-banner">
+  <div class="nl-text"><strong>Get daily Solana intelligence in your inbox.</strong> Key numbers + what they mean, every morning.</div>
+  <a href="/#newsletter">Subscribe Free</a>
 </div>
 
-<!-- SUB TABS: Overview -->
-<div class="sub-bar" id="sub-overview" style="display:flex">
-  <button class="sub-tab active" data-panel="market" onclick="showPanel('market')">&#128202; Market</button>
-  <button class="sub-tab" data-panel="technical" onclick="showPanel('technical')">&#128200; Technical</button>
-  <button class="sub-tab" data-panel="news" onclick="showPanel('news')">&#128240; News</button>
-</div>
-<!-- SUB TABS: Deep Dive -->
-<div class="sub-bar" id="sub-deepdive" style="display:none">
-  <button class="sub-tab" data-panel="ecosystem" onclick="showPanel('ecosystem')">&#127760; Ecosystem</button>
-  <button class="sub-tab" data-panel="solana" onclick="showPanel('solana')">&#9678; Solana</button>
-  <button class="sub-tab" data-panel="dex" onclick="showPanel('dex')">&#128177; DEX Volume</button>
-  <button class="sub-tab" data-panel="protocols" onclick="showPanel('protocols')">&#127959; Protocols</button>
-</div>
-<!-- SUB TABS: Intelligence -->
-<div class="sub-bar" id="sub-intelligence" style="display:none">
-  <button class="sub-tab" data-panel="whales" onclick="showPanel('whales')">&#128011; Whales</button>
-  <button class="sub-tab" data-panel="marketmakers" onclick="showPanel('marketmakers')">&#127963; Market Makers</button>
-  <button class="sub-tab" data-panel="xpulse" onclick="showPanel('xpulse')">&#120143; X Pulse</button>
-  <button class="sub-tab" data-panel="signal" onclick="showPanel('signal')">&#129504; The Signal</button>
-</div>
-<!-- SUB TABS: Content -->
-<div class="sub-bar" id="sub-content" style="display:none">
-  <button class="sub-tab" data-panel="pitches" onclick="showPanel('pitches')">&#128221; Pitches</button>
-  <button class="sub-tab" data-panel="tweets" onclick="showPanel('tweets')">&#128038; Tweets</button>
-  <button class="sub-tab" data-panel="briefing" onclick="showPanel('briefing')">&#127908; Briefing</button>
+<!-- ====== MARKET ====== -->
+<div class="dash-section" id="market">
+  <div class="section-title">Market Overview</div>
+  {build_market_panel(prices, global_data, fg, wow)}
 </div>
 
-<!-- PANELS -->
-<div class="panel active" id="panel-market">{build_market_panel(prices, global_data, fg, wow)}</div>
-<div class="panel" id="panel-technical">{build_technical_panel(technicals, monthly_returns)}</div>
-<div class="panel" id="panel-news">{build_news_panel(news)}</div>
-<div class="panel" id="panel-ecosystem">{build_ecosystem_panel(chain_tvls, trending)}</div>
-<div class="panel" id="panel-solana">{build_solana_panel(solana, wow)}</div>
-<div class="panel" id="panel-dex">{build_dex_panel(dex)}</div>
-<div class="panel" id="panel-protocols">{build_protocols_panel(protocols)}</div>
-<div class="panel" id="panel-whales">{build_whale_panel(whales)}</div>
-<div class="panel" id="panel-marketmakers">{build_market_makers_panel(narrative)}</div>
-<div class="panel" id="panel-xpulse">{build_xpulse_panel(narrative)}</div>
-<div class="panel" id="panel-signal">{build_signal_panel(signal)}</div>
-<div class="panel" id="panel-pitches">{build_pitches_panel(pitches)}</div>
-<div class="panel" id="panel-tweets">{build_tweets_panel(tweets)}</div>
-<div class="panel" id="panel-briefing">{build_briefing_panel(briefing)}</div>
+<!-- ====== TECHNICAL ====== -->
+<div class="dash-section" id="technical">
+  <div class="section-title">SOL Technical Analysis</div>
+  {build_technical_panel(technicals, monthly_returns)}
+</div>
 
-<footer>Solana Weekly Intelligence &middot; Built for @thomasbahamas &middot; {esc(generated_at)}</footer>
+<!-- ====== SOLANA ECOSYSTEM ====== -->
+<div class="dash-section" id="solana">
+  <div class="section-title">Solana Ecosystem</div>
+  {build_solana_panel(solana, wow)}
+</div>
+
+<!-- ====== DEX VOLUME ====== -->
+<div class="dash-section" id="dex">
+  <div class="section-title">DEX Volume</div>
+  {build_dex_panel(dex)}
+</div>
+
+<!-- ====== PROTOCOLS ====== -->
+<div class="dash-section" id="protocols">
+  <div class="section-title">Top Protocols</div>
+  {build_protocols_panel(protocols)}
+</div>
+
+<!-- ====== NETWORK UPGRADES ====== -->
+<div class="dash-section" id="upgrades">
+  <div class="section-title">Network Upgrades</div>
+  {build_upgrades_panel(upgrades)}
+</div>
+
+<!-- ====== THE SIGNAL ====== -->
+<div class="dash-section" id="signal">
+  <div class="section-title">The Signal</div>
+  {build_signal_panel(signal)}
+</div>
+
+<!-- ====== INTELLIGENCE ====== -->
+<div class="dash-section" id="intelligence">
+  <div class="section-title">Intelligence</div>
+  <div class="section-cols">
+    <div>
+      <h4>Whales &amp; Staking</h4>
+      {build_whale_panel(whales)}
+    </div>
+    <div>
+      <h4>Market Makers</h4>
+      {build_market_makers_panel(narrative)}
+    </div>
+  </div>
+  <div style="margin-top:20px">
+    <h4>X Pulse</h4>
+    {build_xpulse_panel(narrative)}
+  </div>
+</div>
+
+<!-- ====== ECOSYSTEM ====== -->
+<div class="dash-section" id="ecosystem">
+  <div class="section-title">Cross-Chain Ecosystem</div>
+  {build_ecosystem_panel(chain_tvls, trending)}
+</div>
+
+<!-- ====== NEWS ====== -->
+<div class="dash-section" id="news">
+  <div class="section-title">News Feed</div>
+  {build_news_panel(news)}
+</div>
+
+<footer>
+  <a href="/">solanaweekly.io</a> &middot; Daily Solana Intelligence &middot; {esc(generated_at)}
+</footer>
 
 <script>{JS}</script>
 </body>
@@ -982,14 +1525,28 @@ def run() -> str:
         log.error("No compiled data found")
         return ""
 
-    html = build_dashboard(compiled, narrative)
+    # Build full dashboard → output/dashboard/index.html
+    dashboard_html = build_dashboard(compiled, narrative)
+    dashboard_dir = OUTPUT_DIR / "dashboard"
+    dashboard_dir.mkdir(parents=True, exist_ok=True)
+    dashboard_path = dashboard_dir / "index.html"
+    with open(dashboard_path, "w") as f:
+        f.write(dashboard_html)
+    log.info(f"Dashboard written to {dashboard_path}")
 
-    output_path = OUTPUT_DIR / "index.html"
-    with open(output_path, "w") as f:
-        f.write(html)
+    # Build homepage → output/index.html
+    homepage_html = build_homepage(compiled, narrative)
+    homepage_path = OUTPUT_DIR / "index.html"
+    with open(homepage_path, "w") as f:
+        f.write(homepage_html)
+    log.info(f"Homepage written to {homepage_path}")
 
-    log.info(f"Dashboard written to {output_path}")
-    return str(output_path)
+    # Write CNAME for GitHub Pages custom domain
+    cname_path = OUTPUT_DIR / "CNAME"
+    with open(cname_path, "w") as f:
+        f.write("solanaweekly.io")
+
+    return str(dashboard_path)
 
 
 if __name__ == "__main__":
