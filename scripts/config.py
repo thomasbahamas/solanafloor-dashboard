@@ -46,7 +46,6 @@ WATCHLIST = {
     "bonk": "BONK",
     "hyperliquid": "HYPE",
     "zcash": "ZEC",
-    "near": "NEAR",
 }
 
 # Top chains to track TVL (top 10 + Solana always included)
