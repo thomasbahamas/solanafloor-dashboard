@@ -349,7 +349,14 @@ def fetch_sector_breakdown() -> dict:
 
 def fetch_tx_economics() -> dict:
     """Solana transaction fee economics from RPC priority fee data."""
-    samples = rpc_post("getRecentPrioritizationFees")
+    # Query with popular writable account keys to get real priority fees
+    # (global query without accounts returns 0 for all slots)
+    popular_accounts = [
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",   # Jupiter v6
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",  # Raydium AMM
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",   # Orca Whirlpool
+    ]
+    samples = rpc_post("getRecentPrioritizationFees", [popular_accounts])
     if not samples or not isinstance(samples, list):
         return {
             "base_fee_lamports": 5000,

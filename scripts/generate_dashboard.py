@@ -512,7 +512,7 @@ def build_market_makers_panel(narrative):
     mm = narrative.get("market_maker_activity", {})
     signals = mm.get("signals", [])
     if not signals:
-        return '<div class="panel-section"><p class="muted">No market maker signals detected.</p></div>'
+        return ""
 
     signals_html = '<h4>Recent Signals</h4>'
     for s in signals:
@@ -555,14 +555,19 @@ def build_xpulse_panel(narrative):
   <strong>{esc(n.get("title",""))}</strong> &mdash; {esc(n.get("detail",""))}
 </div>'''
 
-    return f'''<div class="panel-section">
-  <h4>Protocol Updates</h4>
-  {proto_html if proto_html else '<p class="muted">No protocol updates available.</p>'}
-  <h4 style="margin-top:16px">Influencer Takes</h4>
-  {influ_html if influ_html else '<p class="muted">No influencer takes available.</p>'}
-  <h4 style="margin-top:16px">Trending Narratives</h4>
-  {narr_html if narr_html else '<p class="muted">No trending narratives available.</p>'}
-</div>'''
+    # Hide entire panel if no data at all
+    if not proto_html and not influ_html and not narr_html:
+        return ""
+
+    parts = []
+    if proto_html:
+        parts.append(f'<h4>Protocol Updates</h4>{proto_html}')
+    if influ_html:
+        parts.append(f'<h4 style="margin-top:16px">Influencer Takes</h4>{influ_html}')
+    if narr_html:
+        parts.append(f'<h4 style="margin-top:16px">Trending Narratives</h4>{narr_html}')
+
+    return f'<div class="panel-section">{"".join(parts)}</div>'
 
 
 def build_upgrades_panel(upgrades):
@@ -720,8 +725,8 @@ def build_upgrades_panel(upgrades):
 def build_defi_yields_panel(solana):
     """DeFi yields panel — top Solana lending/LP APYs."""
     yields = solana.get("defi_yields", {})
-    if not yields:
-        return '<div class="panel-section"><p class="muted">DeFi yield data collecting...</p></div>'
+    if not yields or not yields.get("top_yields"):
+        return ""
 
     summary = yields.get("summary", {})
     top_yields = yields.get("top_yields", [])
@@ -782,9 +787,13 @@ def build_tx_economics_panel(solana):
     """Transaction economics panel — fees, priority fees."""
     tx_econ = solana.get("tx_economics", {})
     if not tx_econ:
-        return '<div class="panel-section"><p class="muted">Transaction economics data collecting...</p></div>'
+        return ""
 
     pf = tx_econ.get("priority_fees", {})
+    # Hide if no meaningful data (all zeros or no samples)
+    if not pf or (pf.get("median", 0) == 0 and pf.get("p90", 0) == 0 and pf.get("sample_count", 0) == 0):
+        return ""
+
     base_sol = tx_econ.get("base_fee_sol", 0.000005)
 
     return f'''<div class="panel-section">
@@ -845,7 +854,7 @@ def build_sectors_panel(solana):
     depin = sectors_data.get("depin", [])
 
     if not sectors:
-        return '<div class="panel-section"><p class="muted">Sector data collecting...</p></div>'
+        return ""
 
     # Sector table
     sector_rows = ""
@@ -887,10 +896,14 @@ def build_sectors_panel(solana):
 
 
 def build_signal_panel(signal):
-    context = signal.get("market_context", "No analysis generated.")
+    context = signal.get("market_context", "")
     divergences = signal.get("divergence_alerts", [])
     angles = signal.get("story_angles", [])
     key_rel = signal.get("key_data_relationships", "")
+
+    # Hide entire panel if no signal data
+    if not context and not divergences and not angles:
+        return ""
 
     div_html = ""
     for d in divergences:
@@ -905,18 +918,22 @@ def build_signal_panel(signal):
     for a in angles:
         angles_html += f'<div class="narr-item"><span class="narr-arrow">&#9656;</span> {esc(a)}</div>'
 
-    return f'''<div class="panel-section">
-  <h4>Market Context</h4>
-  <div class="signal-context">{esc(context)}</div>
-  <h4 style="margin-top:16px">&#9888; Divergence Alerts</h4>
-  {div_html if div_html else '<p class="muted">No divergences detected.</p>'}
-  <h4 style="margin-top:16px">&#128225; Story Angles</h4>
-  {angles_html}
-  {f'<h4 style="margin-top:16px">&#9673; Key Data Relationships</h4><div class="signal-context">{esc(key_rel)}</div>' if key_rel else ''}
-</div>'''
+    parts = []
+    if context:
+        parts.append(f'<h4>Market Context</h4><div class="signal-context">{esc(context)}</div>')
+    if div_html:
+        parts.append(f'<h4 style="margin-top:16px">&#9888; Divergence Alerts</h4>{div_html}')
+    if angles_html:
+        parts.append(f'<h4 style="margin-top:16px">&#128225; Story Angles</h4>{angles_html}')
+    if key_rel:
+        parts.append(f'<h4 style="margin-top:16px">&#9673; Key Data Relationships</h4><div class="signal-context">{esc(key_rel)}</div>')
+
+    return f'<div class="panel-section">{"".join(parts)}</div>'
 
 
 def build_pitches_panel(pitches):
+    if not pitches:
+        return ""
     html = ""
     for p in pitches[:3]:
         badge = '<span class="pitch-new">New</span>' if p.get("is_new") else ""
@@ -929,6 +946,8 @@ def build_pitches_panel(pitches):
 
 
 def build_tweets_panel(tweets):
+    if not tweets:
+        return ""
     html = ""
     for i, t in enumerate(tweets[:2]):
         letter = chr(65 + i)
@@ -944,7 +963,7 @@ def build_tweets_panel(tweets):
 
 def build_briefing_panel(briefing):
     if not briefing:
-        return '<div class="panel-section"><p class="muted">No briefing generated.</p></div>'
+        return ""
     return f'''<div class="panel-section">
   <div class="brief-header">
     <span class="muted">~3-4 min read</span>
@@ -1688,6 +1707,46 @@ function handleSubscribe(e) {{
 # Main builder
 # ---------------------------------------------------------------------------
 
+def _section_if(panel_html: str, section_id: str, title: str) -> str:
+    """Wrap panel HTML in a dash-section div, or return empty string if panel is empty."""
+    if not panel_html or not panel_html.strip():
+        return ""
+    return f'''<div class="dash-section" id="{section_id}">
+  <div class="section-title">{title}</div>
+  {panel_html}
+</div>'''
+
+
+def _build_intelligence_section(whales: dict, narrative: dict) -> str:
+    """Build the Intelligence section, hiding sub-panels that have no data."""
+    whale_html = build_whale_panel(whales)
+    mm_html = build_market_makers_panel(narrative)
+    xpulse_html = build_xpulse_panel(narrative)
+
+    # If nothing has data, hide the whole section
+    has_whales = bool(whales.get("whale_news") or whales.get("staking_flows", {}).get("protocols"))
+    has_mm = bool(mm_html)
+    has_xpulse = bool(xpulse_html)
+
+    if not has_whales and not has_mm and not has_xpulse:
+        return ""
+
+    cols = []
+    if has_whales:
+        cols.append(f'<div><h4>Whales &amp; Staking</h4>{whale_html}</div>')
+    if has_mm:
+        cols.append(f'<div><h4>Market Makers</h4>{mm_html}</div>')
+
+    cols_html = f'<div class="section-cols">{"".join(cols)}</div>' if cols else ""
+    xpulse_section = f'<div style="margin-top:20px"><h4>X Pulse</h4>{xpulse_html}</div>' if has_xpulse else ""
+
+    return f'''<div class="dash-section" id="intelligence">
+  <div class="section-title">Intelligence</div>
+  {cols_html}
+  {xpulse_section}
+</div>'''
+
+
 def build_dashboard(compiled: dict, narrative: dict) -> str:
     market = compiled.get("market", {})
     solana = compiled.get("solana", {})
@@ -1714,7 +1773,85 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
     gauge_mini = svg_gauge(fg_val if isinstance(fg_val, (int, float)) else 50, size=70)
 
     generated_at = compiled.get("generated_at", now_utc())
-    date_str = generated_at[:10] if len(generated_at) >= 10 else generated_at
+
+    # Build all sections; skip empty ones
+    # Each entry: (id, nav_label, html)
+    sections = []
+
+    sections.append(("market", "Market", f'''<div class="dash-section" id="market">
+  <div class="section-title">Market Overview</div>
+  {build_market_panel(prices, global_data, fg, wow)}
+</div>'''))
+
+    sections.append(("technical", "Technical", f'''<div class="dash-section" id="technical">
+  <div class="section-title">SOL Technical Analysis</div>
+  {build_technical_panel(technicals, monthly_returns)}
+</div>'''))
+
+    sections.append(("solana", "Solana", f'''<div class="dash-section" id="solana">
+  <div class="section-title">Solana Ecosystem</div>
+  {build_solana_panel(solana, wow)}
+</div>'''))
+
+    sections.append(("dex", "DEX", f'''<div class="dash-section" id="dex">
+  <div class="section-title">DEX Volume</div>
+  {build_dex_panel(dex)}
+</div>'''))
+
+    sections.append(("protocols", "Protocols", f'''<div class="dash-section" id="protocols">
+  <div class="section-title">Top Protocols</div>
+  {build_protocols_panel(protocols)}
+</div>'''))
+
+    yields_panel = build_defi_yields_panel(solana)
+    if yields_panel:
+        sections.append(("yields", "Yields", f'''<div class="dash-section" id="yields">
+  <div class="section-title">DeFi Yields</div>
+  {yields_panel}
+</div>'''))
+
+    sectors_panel = build_sectors_panel(solana)
+    if sectors_panel:
+        sections.append(("sectors", "Sectors", f'''<div class="dash-section" id="sectors">
+  <div class="section-title">Sectors &amp; DePIN</div>
+  {sectors_panel}
+</div>'''))
+
+    sections.append(("upgrades", "Upgrades", f'''<div class="dash-section" id="upgrades">
+  <div class="section-title">Network Upgrades</div>
+  {build_upgrades_panel(upgrades)}
+</div>'''))
+
+    tx_econ_html = _section_if(build_tx_economics_panel(solana), "tx-econ", "Transaction Economics")
+    if tx_econ_html:
+        sections.append(("tx-econ", "Fees", tx_econ_html))
+
+    signal_html = _section_if(build_signal_panel(signal), "signal", "The Signal")
+    if signal_html:
+        sections.append(("signal", "Signal", signal_html))
+
+    intel_html = _build_intelligence_section(whales, narrative)
+    if intel_html:
+        sections.append(("intelligence", "Intel", intel_html))
+
+    trending_html = ''.join(f'<span class="trending-tag">#{t.get("market_cap_rank","?")} <strong>{esc(t.get("symbol","?"))}</strong></span>' for t in trending[:10])
+    sections.append(("competitive", "Share", f'''<div class="dash-section" id="competitive">
+  <div class="section-title">Chain Market Share</div>
+  {build_competitive_panel(chain_tvls)}
+  <div style="margin-top:20px">
+    <h4>Trending on CoinGecko</h4>
+    <div class="trending-row">{trending_html}</div>
+  </div>
+</div>'''))
+
+    sections.append(("news", "News", f'''<div class="dash-section" id="news">
+  <div class="section-title">News Feed</div>
+  {build_news_panel(news)}
+</div>'''))
+
+    # Build nav dynamically from active sections
+    nav_links = "".join(f'<a href="#{sid}">{label}</a>' for sid, label, _ in sections)
+    body_sections = "\n".join(html for _, _, html in sections)
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -1727,7 +1864,6 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
 </head>
 <body>
 
-<!-- HEADER -->
 <div class="header">
   <div class="header-left">
     <h1><a href="/">SOLANA WEEKLY</a></h1>
@@ -1742,24 +1878,8 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
   </div>
 </div>
 
-<!-- STICKY NAV -->
-<nav class="section-nav">
-  <a href="#market" class="active">Market</a>
-  <a href="#technical">Technical</a>
-  <a href="#solana">Solana</a>
-  <a href="#dex">DEX</a>
-  <a href="#protocols">Protocols</a>
-  <a href="#yields">Yields</a>
-  <a href="#sectors">Sectors</a>
-  <a href="#upgrades">Upgrades</a>
-  <a href="#tx-econ">Fees</a>
-  <a href="#signal">Signal</a>
-  <a href="#intelligence">Intel</a>
-  <a href="#competitive">Share</a>
-  <a href="#news">News</a>
-</nav>
+<nav class="section-nav">{nav_links}</nav>
 
-<!-- NEWSLETTER BANNER -->
 <div class="nl-banner">
   <div class="nl-text"><strong>Get daily Solana intelligence in your inbox.</strong> Key numbers + what they mean, every morning.</div>
   <form class="nl-form" id="dash-nl-form" onsubmit="return dashSubscribe(event)">
@@ -1769,100 +1889,7 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
   <div id="dash-nl-msg" style="font-size:0.78rem;display:none"></div>
 </div>
 
-<!-- ====== MARKET ====== -->
-<div class="dash-section" id="market">
-  <div class="section-title">Market Overview</div>
-  {build_market_panel(prices, global_data, fg, wow)}
-</div>
-
-<!-- ====== TECHNICAL ====== -->
-<div class="dash-section" id="technical">
-  <div class="section-title">SOL Technical Analysis</div>
-  {build_technical_panel(technicals, monthly_returns)}
-</div>
-
-<!-- ====== SOLANA ECOSYSTEM ====== -->
-<div class="dash-section" id="solana">
-  <div class="section-title">Solana Ecosystem</div>
-  {build_solana_panel(solana, wow)}
-</div>
-
-<!-- ====== DEX VOLUME ====== -->
-<div class="dash-section" id="dex">
-  <div class="section-title">DEX Volume</div>
-  {build_dex_panel(dex)}
-</div>
-
-<!-- ====== PROTOCOLS ====== -->
-<div class="dash-section" id="protocols">
-  <div class="section-title">Top Protocols</div>
-  {build_protocols_panel(protocols)}
-</div>
-
-<!-- ====== DEFI YIELDS ====== -->
-<div class="dash-section" id="yields">
-  <div class="section-title">DeFi Yields</div>
-  {build_defi_yields_panel(solana)}
-</div>
-
-<!-- ====== SECTORS ====== -->
-<div class="dash-section" id="sectors">
-  <div class="section-title">Sectors &amp; DePIN</div>
-  {build_sectors_panel(solana)}
-</div>
-
-<!-- ====== NETWORK UPGRADES ====== -->
-<div class="dash-section" id="upgrades">
-  <div class="section-title">Network Upgrades</div>
-  {build_upgrades_panel(upgrades)}
-</div>
-
-<!-- ====== TX ECONOMICS ====== -->
-<div class="dash-section" id="tx-econ">
-  <div class="section-title">Transaction Economics</div>
-  {build_tx_economics_panel(solana)}
-</div>
-
-<!-- ====== THE SIGNAL ====== -->
-<div class="dash-section" id="signal">
-  <div class="section-title">The Signal</div>
-  {build_signal_panel(signal)}
-</div>
-
-<!-- ====== INTELLIGENCE ====== -->
-<div class="dash-section" id="intelligence">
-  <div class="section-title">Intelligence</div>
-  <div class="section-cols">
-    <div>
-      <h4>Whales &amp; Staking</h4>
-      {build_whale_panel(whales)}
-    </div>
-    <div>
-      <h4>Market Makers</h4>
-      {build_market_makers_panel(narrative)}
-    </div>
-  </div>
-  <div style="margin-top:20px">
-    <h4>X Pulse</h4>
-    {build_xpulse_panel(narrative)}
-  </div>
-</div>
-
-<!-- ====== COMPETITIVE ====== -->
-<div class="dash-section" id="competitive">
-  <div class="section-title">Chain Market Share</div>
-  {build_competitive_panel(chain_tvls)}
-  <div style="margin-top:20px">
-    <h4>Trending on CoinGecko</h4>
-    <div class="trending-row">{''.join(f'<span class="trending-tag">#{t.get("market_cap_rank","?")} <strong>{esc(t.get("symbol","?"))}</strong></span>' for t in trending[:10])}</div>
-  </div>
-</div>
-
-<!-- ====== NEWS ====== -->
-<div class="dash-section" id="news">
-  <div class="section-title">News Feed</div>
-  {build_news_panel(news)}
-</div>
+{body_sections}
 
 <footer>
   <a href="/">solanaweekly.io</a> &middot; Daily Solana Intelligence &middot; {esc(generated_at)}

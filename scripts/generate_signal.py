@@ -118,55 +118,55 @@ def build_data_prompt(compiled: dict) -> str:
     # Market overview
     sections.append("=== MARKET OVERVIEW ===")
     sections.append(f"Fear & Greed: {fg.get('value', 'N/A')} — {fg.get('label', 'N/A')} (Yesterday: {fg.get('yesterday', 'N/A')})")
-    sections.append(f"Total Market Cap: ${global_data.get('total_market_cap', 0)/1e12:.2f}T ({global_data.get('market_cap_change_24h', 0):+.1f}% 24h)")
+    sections.append(f"Total Market Cap: ${(global_data.get('total_market_cap') or 0)/1e12:.2f}T ({(global_data.get('market_cap_change_24h') or 0):+.1f}% 24h)")
     sections.append(f"BTC Dominance: {global_data.get('btc_dominance', 0)}% | SOL Dominance: {global_data.get('sol_dominance', 0)}%")
     sections.append("")
     for ticker, data in prices.items():
-        sections.append(f"  {ticker}: ${data['price']:,.2f} ({data['change_24h']:+.1f}% 24h)")
+        sections.append(f"  {ticker}: ${(data.get('price') or 0):,.2f} ({(data.get('change_24h') or 0):+.1f}% 24h)")
 
     # SOL technicals
     sections.append("")
     sections.append("=== SOL TECHNICALS ===")
-    sections.append(f"Price: ${technicals.get('price', 0):,.2f}")
-    sections.append(f"50-Day MA: ${technicals.get('ma_50', 0):,.2f}")
-    sections.append(f"200-Day MA: ${technicals.get('ma_200', 0):,.2f}")
-    sections.append(f"RSI(14): {technicals.get('rsi_14', 'N/A')}")
-    sections.append(f"MA Signal: {technicals.get('ma_signal', 'N/A')}")
+    sections.append(f"Price: ${(technicals.get('price') or 0):,.2f}")
+    sections.append(f"50-Day MA: ${(technicals.get('ma_50') or 0):,.2f}")
+    sections.append(f"200-Day MA: ${(technicals.get('ma_200') or 0):,.2f}")
+    sections.append(f"RSI(14): {technicals.get('rsi_14') or 'N/A'}")
+    sections.append(f"MA Signal: {technicals.get('ma_signal') or 'N/A'}")
 
     # Solana ecosystem
     sections.append("")
     sections.append("=== SOLANA ECOSYSTEM ===")
     sol_tvl = solana.get("solana_tvl", {})
-    sections.append(f"Solana TVL: ${sol_tvl.get('current', 0)/1e9:.2f}B ({sol_tvl.get('change_1d', 0):+.1f}% 24h)")
-    sections.append(f"Spot DEX Volume: ${dex.get('spot_24h', 0)/1e9:.2f}B ({dex.get('spot_change_1d', 0):+.1f}%)")
-    sections.append(f"Perp DEX Volume: ${dex.get('perp_24h', 0)/1e9:.2f}B")
-    sections.append(f"Combined DEX: ${dex.get('combined_24h', 0)/1e9:.2f}B")
-    sections.append(f"Fees 24h: ${fees.get('total_24h', 0)/1e6:.1f}M")
-    sections.append(f"Stablecoins on Solana: ${stables.get('total', 0)/1e9:.2f}B")
-    sections.append(f"TPS (total): {network.get('tps_total', 'N/A')} | Non-vote: {network.get('tps_non_vote', 'N/A')}")
+    sections.append(f"Solana TVL: ${(sol_tvl.get('current') or 0)/1e9:.2f}B ({(sol_tvl.get('change_1d') or 0):+.1f}% 24h)")
+    sections.append(f"Spot DEX Volume: ${(dex.get('spot_24h') or 0)/1e9:.2f}B ({(dex.get('spot_change_1d') or 0):+.1f}%)")
+    sections.append(f"Perp DEX Volume: ${(dex.get('perp_24h') or 0)/1e9:.2f}B")
+    sections.append(f"Combined DEX: ${(dex.get('combined_24h') or 0)/1e9:.2f}B")
+    sections.append(f"Fees 24h: ${(fees.get('total_24h') or 0)/1e6:.1f}M")
+    sections.append(f"Stablecoins on Solana: ${(stables.get('total') or 0)/1e9:.2f}B")
+    sections.append(f"TPS (total): {network.get('tps_total') or 'N/A'} | Non-vote: {network.get('tps_non_vote') or 'N/A'}")
 
     # Top DEXes
     sections.append("")
     sections.append("Top Spot DEXes:")
     for d in dex.get("top_spot", [])[:10]:
-        sections.append(f"  {d['name']}: ${d['volume_24h']/1e6:.1f}M ({d['change_1d']:+.1f}%)")
+        sections.append(f"  {d['name']}: ${(d.get('volume_24h') or 0)/1e6:.1f}M ({(d.get('change_1d') or 0):+.1f}%)")
 
     sections.append("")
     sections.append("Top Perp DEXes:")
     for d in dex.get("top_perps", [])[:7]:
-        sections.append(f"  {d['name']}: ${d['volume_24h']/1e6:.1f}M ({d['change_1d']:+.1f}%)")
+        sections.append(f"  {d['name']}: ${(d.get('volume_24h') or 0)/1e6:.1f}M ({(d.get('change_1d') or 0):+.1f}%)")
 
     # Top protocols
     sections.append("")
     sections.append("Top 20 Solana Protocols by TVL:")
     for i, p in enumerate(protocols[:20], 1):
-        sections.append(f"  {i}. {p['name']} ({p['category']}): ${p['tvl']/1e6:.1f}M ({p['change_1d']:+.1f}% 1d, {p['change_7d']:+.1f}% 7d)")
+        sections.append(f"  {i}. {p['name']} ({p.get('category', '')}): ${(p.get('tvl') or 0)/1e6:.1f}M ({(p.get('change_1d') or 0):+.1f}% 1d, {(p.get('change_7d') or 0):+.1f}% 7d)")
 
     # Chain TVLs (top 10)
     sections.append("")
     sections.append("Chain TVLs (Top 10):")
     for c in chain_tvls[:10]:
-        sections.append(f"  {c['name']}: ${c['tvl']/1e9:.2f}B")
+        sections.append(f"  {c['name']}: ${(c.get('tvl') or 0)/1e9:.2f}B")
 
     # News
     sections.append("")
@@ -195,9 +195,9 @@ def build_data_prompt(compiled: dict) -> str:
         sections.append(f"  {w['title']} — {w['source']}")
 
     if staking_flows:
-        sections.append(f"Total Liquid Staking TVL: ${staking_flows.get('total_staked_tvl', 0)/1e9:.2f}B")
+        sections.append(f"Total Liquid Staking TVL: ${(staking_flows.get('total_staked_tvl') or 0)/1e9:.2f}B")
         for p in staking_flows.get("protocols", [])[:5]:
-            sections.append(f"  {p['name']}: ${p['tvl']/1e6:.0f}M ({p['change_1d']:+.1f}% 1d)")
+            sections.append(f"  {p['name']}: ${(p.get('tvl') or 0)/1e6:.0f}M ({(p.get('change_1d') or 0):+.1f}% 1d)")
 
     # Sector breakdown
     sectors_data = solana.get("sectors", {})
@@ -207,12 +207,12 @@ def build_data_prompt(compiled: dict) -> str:
         sections.append("")
         sections.append("=== SECTOR ROTATION (Solana) ===")
         for s in sectors[:12]:
-            sections.append(f"  {s['sector']}: {s['tvl']/1e6:.0f}M TVL ({s['change_1d']:+.1f}% 24h) — {s['protocol_count']} protocols, top: {s['top_protocol']}")
+            sections.append(f"  {s['sector']}: {(s.get('tvl') or 0)/1e6:.0f}M TVL ({(s.get('change_1d') or 0):+.1f}% 24h) — {s.get('protocol_count', 0)} protocols, top: {s.get('top_protocol', 'N/A')}")
     if depin:
         sections.append("")
         sections.append("DePIN / Infrastructure:")
         for d in depin[:8]:
-            sections.append(f"  {d['name']}: ${d['tvl']/1e6:.1f}M ({d['change_1d']:+.1f}% 1d, {d['change_7d']:+.1f}% 7d)")
+            sections.append(f"  {d['name']}: ${(d.get('tvl') or 0)/1e6:.1f}M ({(d.get('change_1d') or 0):+.1f}% 1d, {(d.get('change_7d') or 0):+.1f}% 7d)")
 
     # DeFi yields
     defi_yields = solana.get("defi_yields", {})
@@ -220,9 +220,9 @@ def build_data_prompt(compiled: dict) -> str:
         sections.append("")
         sections.append("=== DEFI YIELDS (Solana) ===")
         summary = defi_yields.get("summary", {})
-        sections.append(f"Total DeFi TVL: ${summary.get('total_tvl', 0)/1e9:.2f}B | Avg APY: {summary.get('avg_apy', 0):.1f}% | Best Stable: {summary.get('best_stable_apy', 0):.1f}%")
+        sections.append(f"Total DeFi TVL: ${(summary.get('total_tvl') or 0)/1e9:.2f}B | Avg APY: {(summary.get('avg_apy') or 0):.1f}% | Best Stable: {(summary.get('best_stable_apy') or 0):.1f}%")
         for p in defi_yields.get("top_yields", [])[:10]:
-            sections.append(f"  {p.get('project', '')}: {p.get('symbol', '')} — {p.get('apy', 0):.1f}% APY (TVL: ${p.get('tvlUsd', 0)/1e6:.0f}M)")
+            sections.append(f"  {p.get('project', '')}: {p.get('symbol', '')} — {(p.get('apy') or 0):.1f}% APY (TVL: ${(p.get('tvlUsd') or 0)/1e6:.0f}M)")
 
     # Trending
     sections.append("")
