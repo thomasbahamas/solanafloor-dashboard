@@ -213,7 +213,7 @@ def svg_range_bar(current, low, high, width=200, height=24):
 
 def build_market_panel(prices, global_data, fg, wow):
     price_cards = ""
-    order = ["BTC", "ETH", "SOL", "JTO", "BONK", "HYPE", "ZEC"]
+    order = ["BTC", "ETH", "SOL", "JTO", "BONK", "HYPE", "HNT", "RNDR", "ZEC"]
     for ticker in order:
         if ticker not in prices:
             continue
@@ -835,6 +835,54 @@ def build_competitive_panel(chain_tvls):
     <div class="stat"><div class="stat-label">Solana Market Share</div><div class="stat-value" style="color:var(--accent)">{sol_share:.1f}%</div></div>
   </div>
   {rows}
+</div>'''
+
+
+def build_sectors_panel(solana):
+    """Sector rotation and DePIN tracking."""
+    sectors_data = solana.get("sectors", {})
+    sectors = sectors_data.get("sectors", [])
+    depin = sectors_data.get("depin", [])
+
+    if not sectors:
+        return '<div class="panel-section"><p class="muted">Sector data collecting...</p></div>'
+
+    # Sector table
+    sector_rows = ""
+    for s in sectors[:12]:
+        chg = s.get("change_1d", 0)
+        color = "var(--green)" if chg > 0 else "var(--red)" if chg < 0 else "var(--muted)"
+        sector_rows += f'''<tr>
+  <td style="font-weight:600">{esc(s["sector"])}</td>
+  <td>{fmt_usd(s["tvl"])}</td>
+  <td style="color:{color}">{chg:+.1f}%</td>
+  <td class="muted">{s["protocol_count"]}</td>
+  <td class="muted">{esc(s["top_protocol"])}</td>
+</tr>'''
+
+    # DePIN section
+    depin_html = ""
+    if depin:
+        depin_rows = ""
+        for d in depin[:8]:
+            chg = d.get("change_1d", 0)
+            chg7 = d.get("change_7d", 0)
+            color = "var(--green)" if chg > 0 else "var(--red)" if chg < 0 else "var(--muted)"
+            color7 = "var(--green)" if chg7 > 0 else "var(--red)" if chg7 < 0 else "var(--muted)"
+            depin_rows += f'''<tr>
+  <td style="font-weight:600">{esc(d["name"])}</td>
+  <td class="muted">{esc(d.get("category",""))}</td>
+  <td>{fmt_usd(d["tvl"])}</td>
+  <td style="color:{color}">{chg:+.1f}%</td>
+  <td style="color:{color7}">{chg7:+.1f}%</td>
+</tr>'''
+        depin_html = f'''<h4 style="margin-top:20px">DePIN &amp; Infrastructure</h4>
+<table><tr><th>Protocol</th><th>Category</th><th>TVL</th><th>24h</th><th>7d</th></tr>{depin_rows}</table>'''
+
+    return f'''<div class="panel-section">
+  <h4>Sector Rotation (Solana TVL by Category)</h4>
+  <table><tr><th>Sector</th><th>TVL</th><th>24h Chg</th><th>Protocols</th><th>Top Protocol</th></tr>{sector_rows}</table>
+  {depin_html}
 </div>'''
 
 
@@ -1702,6 +1750,7 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
   <a href="#dex">DEX</a>
   <a href="#protocols">Protocols</a>
   <a href="#yields">Yields</a>
+  <a href="#sectors">Sectors</a>
   <a href="#upgrades">Upgrades</a>
   <a href="#tx-econ">Fees</a>
   <a href="#signal">Signal</a>
@@ -1754,6 +1803,12 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
 <div class="dash-section" id="yields">
   <div class="section-title">DeFi Yields</div>
   {build_defi_yields_panel(solana)}
+</div>
+
+<!-- ====== SECTORS ====== -->
+<div class="dash-section" id="sectors">
+  <div class="section-title">Sectors &amp; DePIN</div>
+  {build_sectors_panel(solana)}
 </div>
 
 <!-- ====== NETWORK UPGRADES ====== -->

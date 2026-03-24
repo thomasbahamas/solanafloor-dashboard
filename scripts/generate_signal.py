@@ -29,6 +29,8 @@ RULES:
 - Flag divergences between price action and on-chain activity
 - Identify institutional vs retail positioning gaps
 - Connect macro (F&G, BTC dominance, oil, DXY) to Solana-specific data
+- IDENTIFY TRADE OPPORTUNITIES: When yields spike while TVL drops, when sector rotation is underway, when DePIN metrics diverge from price — call it out explicitly
+- Include sector rotation analysis: which Solana sectors (DeFi, DEX, Lending, Liquid Staking, DePIN, Gaming) are gaining/losing capital
 - Story pitches should be VIDEO-ready — strong hooks, clear narrative arc
 - Tweets should be data-forward, no emojis, no shilling
 - Briefing script should be readable in 3-4 minutes at a natural pace
@@ -196,6 +198,21 @@ def build_data_prompt(compiled: dict) -> str:
         sections.append(f"Total Liquid Staking TVL: ${staking_flows.get('total_staked_tvl', 0)/1e9:.2f}B")
         for p in staking_flows.get("protocols", [])[:5]:
             sections.append(f"  {p['name']}: ${p['tvl']/1e6:.0f}M ({p['change_1d']:+.1f}% 1d)")
+
+    # Sector breakdown
+    sectors_data = solana.get("sectors", {})
+    sectors = sectors_data.get("sectors", [])
+    depin = sectors_data.get("depin", [])
+    if sectors:
+        sections.append("")
+        sections.append("=== SECTOR ROTATION (Solana) ===")
+        for s in sectors[:12]:
+            sections.append(f"  {s['sector']}: {s['tvl']/1e6:.0f}M TVL ({s['change_1d']:+.1f}% 24h) — {s['protocol_count']} protocols, top: {s['top_protocol']}")
+    if depin:
+        sections.append("")
+        sections.append("DePIN / Infrastructure:")
+        for d in depin[:8]:
+            sections.append(f"  {d['name']}: ${d['tvl']/1e6:.1f}M ({d['change_1d']:+.1f}% 1d, {d['change_7d']:+.1f}% 7d)")
 
     # DeFi yields
     defi_yields = solana.get("defi_yields", {})

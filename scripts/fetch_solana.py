@@ -278,6 +278,75 @@ def fetch_defi_yields() -> dict:
     }
 
 
+def fetch_sector_breakdown() -> dict:
+    """Break down Solana protocols by category/sector for sector rotation analysis."""
+    data = api_get("https://api.llama.fi/protocols")
+    if not data or not isinstance(data, list):
+        return {"sectors": [], "depin": []}
+
+    sectors = {}  # category -> {tvl, count, top_protocol, change_1d}
+    depin_protocols = []
+
+    for p in data:
+        chains = p.get("chains", [])
+        if "Solana" not in chains:
+            continue
+
+        # Get Solana-specific TVL
+        chain_tvls = p.get("chainTvls", {})
+        sol_tvl = chain_tvls.get("Solana", 0)
+        if sol_tvl == 0:
+            if chains == ["Solana"]:
+                sol_tvl = p.get("tvl", 0)
+            else:
+                continue
+        if sol_tvl < 100000:  # skip tiny protocols
+            continue
+
+        category = p.get("category", "Other")
+        change_1d = p.get("change_1d") or 0
+        change_7d = p.get("change_7d") or 0
+        name = p.get("name", "Unknown")
+
+        if category not in sectors:
+            sectors[category] = {"tvl": 0, "count": 0, "protocols": [], "change_1d_weighted": 0}
+        sectors[category]["tvl"] += sol_tvl
+        sectors[category]["count"] += 1
+        sectors[category]["protocols"].append({"name": name, "tvl": sol_tvl, "change_1d": change_1d})
+        sectors[category]["change_1d_weighted"] += sol_tvl * change_1d
+
+        # DePIN / infrastructure protocols
+        depin_keywords = ["depin", "helium", "render", "hivemapper", "geodnet", "io.net",
+                          "nosana", "shadow", "grass", "teleport", "srcful", "natix"]
+        if any(kw in name.lower() for kw in depin_keywords) or category in ("Infrastructure", "Services"):
+            depin_protocols.append({
+                "name": name, "category": category, "tvl": sol_tvl,
+                "change_1d": round(change_1d, 1), "change_7d": round(change_7d, 1),
+            })
+
+    # Build sorted sector list
+    sector_list = []
+    for cat, data_dict in sectors.items():
+        tvl = data_dict["tvl"]
+        avg_change = (data_dict["change_1d_weighted"] / tvl) if tvl else 0
+        top = sorted(data_dict["protocols"], key=lambda x: x["tvl"], reverse=True)[0]
+        sector_list.append({
+            "sector": cat,
+            "tvl": tvl,
+            "protocol_count": data_dict["count"],
+            "change_1d": round(avg_change, 1),
+            "top_protocol": top["name"],
+        })
+    sector_list.sort(key=lambda x: x["tvl"], reverse=True)
+
+    depin_protocols.sort(key=lambda x: x["tvl"], reverse=True)
+
+    return {
+        "sectors": sector_list[:15],
+        "depin": depin_protocols[:10],
+    }
+
+
 def fetch_tx_economics() -> dict:
     """Solana transaction fee economics from RPC priority fee data."""
     samples = rpc_post("getRecentPrioritizationFees")
@@ -342,6 +411,9 @@ def run() -> dict:
     stablecoins = fetch_stablecoin_data()
     log.info(f"  Stablecoins: ${stablecoins['total']/1e9:.2f}B")
 
+    sectors = fetch_sector_breakdown()
+    log.info(f"  Sectors: {len(sectors.get('sectors', []))} categories, {len(sectors.get('depin', []))} DePIN protocols")
+
     defi_yields = fetch_defi_yields()
     log.info(f"  DeFi Yields: {defi_yields.get('summary', {}).get('total_pools', 0)} pools")
 
@@ -357,6 +429,7 @@ def run() -> dict:
         "fees": fees,
         "network": network,
         "stablecoins": stablecoins,
+        "sectors": sectors,
         "defi_yields": defi_yields,
         "tx_economics": tx_economics,
     }

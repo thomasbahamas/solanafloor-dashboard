@@ -20,6 +20,8 @@ PAPRIKA_IDS = {
     "jito-governance-token": "jto-jito",
     "bonk": "bonk-bonk",
     "hyperliquid": "hype-hyperliquid",
+    "helium": "hnt-helium",
+    "render-token": "rndr-render-token",
     "zcash": "zec-zcash",
 }
 
