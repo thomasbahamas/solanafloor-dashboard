@@ -111,6 +111,24 @@ def compute_wow(current: dict, previous: dict) -> dict:
     except (KeyError, TypeError, ZeroDivisionError):
         pass
 
+    # Fees 24h
+    try:
+        cur_fees = current["solana"]["fees"]["total_24h"]
+        prev_fees = previous["solana"]["fees"]["total_24h"]
+        if prev_fees:
+            wow["fees_24h"] = round((cur_fees - prev_fees) / prev_fees * 100, 1)
+    except (KeyError, TypeError, ZeroDivisionError):
+        pass
+
+    # Stablecoins on Solana
+    try:
+        cur_stables = current["solana"]["stablecoins"]["total"]
+        prev_stables = previous["solana"]["stablecoins"]["total"]
+        if prev_stables:
+            wow["stables_tvl"] = round((cur_stables - prev_stables) / prev_stables * 100, 1)
+    except (KeyError, TypeError, ZeroDivisionError):
+        pass
+
     return wow
 
 

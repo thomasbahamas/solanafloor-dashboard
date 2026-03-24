@@ -141,10 +141,10 @@ def svg_monthly_returns(monthly_returns):
     """Compact monthly return heatmap-style bar chart."""
     if not monthly_returns:
         return '<p class="muted">Collecting monthly return data...</p>'
-    items = monthly_returns[-12:]  # last 12 months
+    items = monthly_returns[-24:]  # last 24 months
     w = 460
-    bar_w = 32
-    gap = 4
+    bar_w = 22
+    gap = 3
     h = 80
     mid_y = 50
     max_abs = max((abs(m.get("return_pct", 0)) for m in items), default=1) or 1
@@ -213,7 +213,7 @@ def svg_range_bar(current, low, high, width=200, height=24):
 
 def build_market_panel(prices, global_data, fg, wow):
     price_cards = ""
-    order = ["BTC", "ETH", "SOL", "JTO", "BONK", "HYPE", "HNT", "RNDR", "ZEC"]
+    order = ["BTC", "ETH", "SOL", "JTO", "BONK", "HYPE", "HNT", "ZEC"]
     for ticker in order:
         if ticker not in prices:
             continue
@@ -403,10 +403,14 @@ def build_solana_panel(solana, wow):
     <div class="stat"><div class="stat-label">Fees 24h</div>
       <div class="stat-value">{fmt_usd(fees.get("total_24h",0))}</div>
       <div>{fmt_change(fees.get("change_1d"))}</div>
+      <div>{fmt_wow(wow, "fees_24h")}</div>
     </div>
   </div>
   <div class="stats-row">
-    <div class="stat"><div class="stat-label">Stablecoins on Solana</div><div class="stat-value">{fmt_usd(stables.get("total",0))}</div></div>
+    <div class="stat"><div class="stat-label">Stablecoins on Solana</div>
+      <div class="stat-value">{fmt_usd(stables.get("total",0))}</div>
+      <div>{fmt_wow(wow, "stables_tvl")}</div>
+    </div>
   </div>
 
   <h4 style="margin-top:20px">Network Activity</h4>
@@ -1774,6 +1778,18 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
 
     generated_at = compiled.get("generated_at", now_utc())
 
+    # Data freshness check — warn if market data is >6 hours old
+    market_ts = market.get("timestamp", "")
+    stale_badge = ""
+    try:
+        from datetime import datetime, timezone
+        gen_dt = datetime.strptime(market_ts[:16], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - gen_dt).total_seconds() / 3600
+        if age_hours > 6:
+            stale_badge = f' <span style="color:var(--red);font-size:0.7rem;font-weight:600">DATA {int(age_hours)}H OLD</span>'
+    except Exception:
+        pass
+
     # Build all sections; skip empty ones
     # Each entry: (id, nav_label, html)
     sections = []
@@ -1867,7 +1883,7 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
 <div class="header">
   <div class="header-left">
     <h1><a href="/">SOLANA WEEKLY</a></h1>
-    <div class="meta">Updated: {esc(generated_at)}{f" &middot; Run #{run_num}" if run_num else ""}</div>
+    <div class="meta">Updated: {esc(generated_at)}{f" &middot; Run #{run_num}" if run_num else ""}{stale_badge}</div>
   </div>
   <div class="header-right">
     <a href="https://solanaweekly.fun" target="_blank" rel="noopener" class="header-link">Podcast</a>
