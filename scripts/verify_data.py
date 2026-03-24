@@ -126,8 +126,12 @@ def check_news(news: dict, issues: list, warnings: list):
         return
     sol_news = news.get("solana_news", [])
     gen_news = news.get("general_news", [])
-    if not sol_news and not gen_news:
+    rss = news.get("rss_feeds", [])
+    total = len(sol_news) + len(gen_news) + len(rss)
+    if total == 0:
         warnings.append("No news stories at all")
+    elif not sol_news and not gen_news:
+        warnings.append(f"CryptoPanic news empty — using {len(rss)} RSS stories only")
 
 
 def check_upgrades(upgrades: dict, issues: list, warnings: list):

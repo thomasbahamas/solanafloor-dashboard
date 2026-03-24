@@ -205,7 +205,7 @@ def fetch_trending() -> list:
 def _fetch_sol_ohlc_coingecko() -> list | None:
     ohlc = api_get(
         "https://api.coingecko.com/api/v3/coins/solana/ohlc",
-        params={"vs_currency": "usd", "days": "max"},
+        params={"vs_currency": "usd", "days": "365"},
     )
     if not ohlc or not isinstance(ohlc, list) or len(ohlc) < 50:
         return None
@@ -215,7 +215,7 @@ def _fetch_sol_ohlc_coingecko() -> list | None:
 
 def _fetch_sol_ohlc_paprika() -> list | None:
     end = datetime.now(timezone.utc)
-    start = end - timedelta(days=730)
+    start = end - timedelta(days=365)
     data = api_get(
         "https://api.coinpaprika.com/v1/coins/sol-solana/ohlcv/historical",
         params={
