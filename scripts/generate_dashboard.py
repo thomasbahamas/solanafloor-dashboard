@@ -247,11 +247,13 @@ def build_market_panel(prices, global_data, fg, wow):
             continue
         d = prices[ticker]
         sparkline = svg_sparkline(d.get("sparkline_7d", []), width=100, height=28)
+        p = d["price"]
+        price_str = f"${p:,.6f}" if p < 0.01 else f"${p:,.4f}" if p < 1 else f"${p:,.2f}"
         price_cards += f'''<div class="card price-card">
   <div class="price-header">
     <div>
       <div class="price-name">{esc(ticker)} <span class="muted">{esc(d.get("name",""))}</span></div>
-      <div class="price-val">${d["price"]:,.2f}</div>
+      <div class="price-val">{price_str}</div>
       <div>{fmt_change(d.get("change_24h"))} <span class="muted" style="font-size:0.7rem">24h</span></div>
     </div>
     <div class="sparkline-wrap">{sparkline}</div>
@@ -1852,6 +1854,10 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
     # Each entry: (id, nav_label, html)
     sections = []
 
+    signal_html = _section_if(build_signal_panel(signal), "signal", "The Signal")
+    if signal_html:
+        sections.append(("signal", "Signal", signal_html))
+
     sections.append(("market", "Market", f'''<div class="dash-section" id="market">
   <div class="section-title">Market Overview</div>
   <div class="section-sources">Sources: <a href="https://www.coingecko.com" target="_blank">CoinGecko</a> &middot; <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank">Fear &amp; Greed Index</a></div>
@@ -1907,10 +1913,6 @@ def build_dashboard(compiled: dict, narrative: dict) -> str:
     tx_econ_html = _section_if(build_tx_economics_panel(solana), "tx-econ", "Transaction Economics")
     if tx_econ_html:
         sections.append(("tx-econ", "Fees", tx_econ_html))
-
-    signal_html = _section_if(build_signal_panel(signal), "signal", "The Signal")
-    if signal_html:
-        sections.append(("signal", "Signal", signal_html))
 
     intel_html = _build_intelligence_section(whales, narrative)
     if intel_html:
