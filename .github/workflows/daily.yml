@@ -2,8 +2,8 @@ name: Solana Weekly Dashboard
 
 on:
   schedule:
-    # Run at 6:00 AM PT (13:00 UTC) every day
-    - cron: '0 13 * * *'
+    # Run at 5:00 AM PT (12:00 UTC) every day
+    - cron: '0 12 * * *'
   workflow_dispatch: # Manual trigger
 
 env:

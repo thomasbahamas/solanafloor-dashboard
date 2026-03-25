@@ -6,6 +6,7 @@ to trigger actual delivery.
 """
 
 import os
+from datetime import datetime, timezone
 from config import load_json, get_logger, now_utc, api_get
 from dotenv import load_dotenv
 import requests
@@ -27,7 +28,7 @@ def create_broadcast(subject: str, html_body: str, text_body: str) -> dict | Non
         log.error("No KIT_API_SECRET or KIT_API_KEY set — cannot send broadcast")
         return None
 
-    send_at = now_utc()[:19] + "Z"
+    send_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     log.info(f"Creating Kit v4 broadcast (send_at={send_at})...")
     resp = requests.post(
         f"{KIT_V4_BASE}/broadcasts",
